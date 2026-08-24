@@ -1,21 +1,37 @@
 import './styles.css';
 
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '2.8.0';
 const STORAGE_KEY = 'swimtimer-independent-v2';
 const names = ['Anna', 'Ben', 'Chloe', 'David', 'Eva', 'Frank', 'Grace', 'Henry', 'Ivy', 'Jack'];
-const makeTimer = (name) => ({ id: crypto.randomUUID(), name, status: 'idle', elapsed: 0, startedAt: null, laps: [], distance: 0 });
+const makeTimer = (name) => {
+  const id = crypto.randomUUID();
+  return { id, studentId: id, name, status: 'idle', elapsed: 0, startedAt: null, laps: [], distance: 0, lastSavedSignature: '' };
+};
 const defaultState = { timers: names.map(makeTimer), view: 'grid', settings: { vibration: true, keepAwake: true, poolLength: 20 }, sessions: [] };
+function normaliseName(value) { return String(value || 'Unnamed').trim().toLocaleLowerCase(); }
 
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (!saved?.timers?.length) return structuredClone(defaultState);
-    return {
+    const loaded = {
       ...structuredClone(defaultState),
       ...saved,
       settings: { ...defaultState.settings, ...saved.settings },
       sessions: Array.isArray(saved.sessions) ? saved.sessions : [],
     };
+    loaded.timers = loaded.timers.map((timer) => ({ ...makeTimer(timer.name || 'Swimmer'), ...timer, studentId: timer.studentId || timer.id || crypto.randomUUID(), lastSavedSignature: timer.lastSavedSignature || '' }));
+    const profilesByName = new Map(loaded.timers.map((timer) => [normaliseName(timer.name), timer.studentId]));
+    const legacyIds = new Map();
+    loaded.sessions = loaded.sessions.map((session) => ({
+      ...session,
+      timers: (session.timers || []).map((timer) => {
+        const nameKey = normaliseName(timer.name);
+        if (!legacyIds.has(nameKey)) legacyIds.set(nameKey, `legacy-${nameKey || crypto.randomUUID()}`);
+        return { ...timer, studentId: timer.studentId || profilesByName.get(nameKey) || legacyIds.get(nameKey), stroke: timer.stroke || '', test: timer.test || '', equipment: timer.equipment || '', notes: timer.notes || '' };
+      }),
+    }));
+    return loaded;
   } catch { return structuredClone(defaultState); }
 }
 
@@ -31,6 +47,8 @@ const timerDistance = (timer) => Math.max(0, Number(timer.distance) || timer.lap
 const savedTimerDistance = (timer, session) => Math.max(0, Number(timer.distance) || timer.laps.length * session.poolLength);
 const esc = (value) => String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 const formatSavedAt = (timestamp) => new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium', timeStyle: 'short' }).format(timestamp);
+const resultSignature = (timer) => `${Math.round(currentElapsed(timer))}|${timerDistance(timer)}|${timer.laps.length}`;
+const isSaved = (timer) => Boolean(timer.lastSavedSignature && timer.lastSavedSignature === resultSignature(timer));
 
 function formatTime(milliseconds) {
   const centisecondsTotal = Math.max(0, Math.floor(milliseconds / 10));
@@ -85,6 +103,7 @@ function timerCard(timer, index) {
   const running = timer.status === 'running';
   const hasTime = currentElapsed(timer) > 0;
   const hasResult = hasTime || timer.laps.length > 0 || timerDistance(timer) > 0;
+  const alreadySaved = isSaved(timer);
   return `<article class="timer-card ${running ? 'running' : ''}" data-card="${timer.id}">
     <div class="card-head"><span class="lane-number">${index + 1}</span><button class="timer-name" data-name="${timer.id}" aria-label="Edit ${esc(timer.name)}">${esc(timer.name)}</button><span class="status-dot" aria-label="${running ? 'Running' : timer.status === 'paused' ? 'Stopped' : 'Idle'}"></span></div>
     <div class="elapsed" data-clock="${timer.id}">${formatTime(currentElapsed(timer))}</div>
@@ -92,7 +111,7 @@ function timerCard(timer, index) {
     <div class="card-actions">
       <button class="${running ? 'stop-button' : 'start-button'}" data-action="${running ? 'stop' : 'start'}" data-id="${timer.id}">${running ? 'STOP' : 'START'}</button>
       <button class="${running ? 'lap-button' : 'reset-button'}" data-action="${running ? 'lap' : 'reset'}" data-id="${timer.id}" ${!running && !hasResult ? 'disabled' : ''}>${running ? 'LAP' : 'RESET'}</button>
-      <button class="save-button" data-action="save" data-id="${timer.id}" ${running || !hasResult ? 'disabled' : ''}>SAVE</button>
+      <button class="save-button ${alreadySaved ? 'saved' : ''}" data-action="save" data-id="${timer.id}" ${running || !hasResult || alreadySaved ? 'disabled' : ''}>${alreadySaved ? 'SAVED' : 'SAVE'}</button>
     </div>
   </article>`;
 }
@@ -117,7 +136,7 @@ function timerAction(id, action) {
   const timer = state.timers.find((item) => item.id === id);
   if (!timer) return;
   if (action === 'start') {
-    timer.startedAt = Date.now(); timer.status = 'running'; requestWakeLock();
+    timer.startedAt = Date.now(); timer.status = 'running'; timer.lastSavedSignature = ''; requestWakeLock();
   }
   if (action === 'stop' && timer.status === 'running') {
     timer.elapsed = currentElapsed(timer); timer.startedAt = null; timer.status = 'paused';
@@ -125,6 +144,7 @@ function timerAction(id, action) {
   if (action === 'lap' && timer.status === 'running') {
     const at = currentElapsed(timer);
     timer.laps.push({ at, split: at - (timer.laps.at(-1)?.at || 0) });
+    timer.lastSavedSignature = '';
     if (state.settings.vibration && navigator.vibrate) navigator.vibrate(35);
   }
   if (action === 'reset') {
@@ -132,7 +152,7 @@ function timerAction(id, action) {
     if (!state.timers.some((item) => item.status === 'running')) releaseWakeLock();
     save(); render(); return;
   }
-  if (action === 'save') { saveIndividualResult(timer); return; }
+  if (action === 'save') { showSaveResultForm(timer); return; }
   if (!state.timers.some((item) => item.status === 'running')) releaseWakeLock();
   save(); render();
 }
@@ -152,7 +172,7 @@ function stopAll() {
 }
 
 function resetTimer(timer) {
-  Object.assign(timer, { status: 'idle', elapsed: 0, startedAt: null, laps: [], distance: 0 });
+  Object.assign(timer, { status: 'idle', elapsed: 0, startedAt: null, laps: [], distance: 0, lastSavedSignature: '' });
 }
 
 function confirmResetAll() {
@@ -177,7 +197,11 @@ function editName(id) {
   dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
   dialog.querySelector('form').addEventListener('submit', (event) => {
     event.preventDefault(); const value = input.value.trim();
-    if (value) { timer.name = value; save(); dialog.close(); render(); }
+    if (value) {
+      timer.name = value;
+      state.sessions.forEach((session) => session.timers.forEach((savedTimer) => { if (savedTimer.studentId === timer.studentId) savedTimer.name = value; }));
+      save(); dialog.close(); render();
+    }
   });
 }
 
@@ -199,13 +223,19 @@ function showDistanceInput(id) {
   const timer = state.timers.find((item) => item.id === id);
   if (!timer) return;
   const dialog = document.querySelector('#dialog');
-  dialog.innerHTML = `<form><h2>${esc(timer.name)} — Distance</h2><p>Enter the total distance completed. You do not need to press LAP during the swim.</p><label class="distance-entry"><span>Total distance</span><span><input id="distance-input" type="number" min="0" max="100000" step="1" inputmode="numeric" value="${timerDistance(timer)}"><b>m</b></span></label><div class="dialog-actions"><button type="button" class="dialog-secondary" data-close>Cancel</button><button class="dialog-primary">Save distance</button></div></form>`;
+  const presets = [...new Set([poolLength(), poolLength() * 2, 50, 100, 200, 400, 800])].sort((a, b) => a - b);
+  dialog.innerHTML = `<form><h2>${esc(timer.name)} — Distance</h2><p>Choose a common distance or enter a custom total. LAP is optional.</p><div class="distance-presets">${presets.map((distance) => `<button type="button" data-distance-preset="${distance}">${distance}m</button>`).join('')}</div><label class="distance-entry"><span>Custom distance</span><span><input id="distance-input" type="number" min="0" max="100000" step="1" inputmode="numeric" value="${timerDistance(timer)}"><b>m</b></span></label><div class="dialog-actions"><button type="button" class="dialog-secondary" data-close>Cancel</button><button class="dialog-primary">Save distance</button></div></form>`;
   dialog.showModal();
   const input = dialog.querySelector('#distance-input'); input.select();
+  dialog.querySelectorAll('[data-distance-preset]').forEach((button) => button.addEventListener('click', () => {
+    input.value = button.dataset.distancePreset;
+    dialog.querySelectorAll('[data-distance-preset]').forEach((item) => item.classList.toggle('active', item === button));
+  }));
   dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
   dialog.querySelector('form').addEventListener('submit', (event) => {
     event.preventDefault();
     timer.distance = Math.min(100000, Math.max(0, Math.round(Number(input.value) || 0)));
+    timer.lastSavedSignature = '';
     save(); dialog.close(); render();
   });
 }
@@ -220,7 +250,8 @@ function showSettings() {
     <div class="setting-row"><span>Vibrate on lap</span><button class="switch ${state.settings.vibration ? 'on' : ''}" data-setting="vibration" aria-label="Toggle vibration"></button></div>
     <div class="setting-row"><span>Keep screen awake</span><button class="switch ${state.settings.keepAwake ? 'on' : ''}" data-setting="keepAwake" aria-label="Toggle screen wake lock"></button></div>
     <div class="records-actions"><button class="save-records" id="save-session" ${hasResults ? '' : 'disabled'}>Save current session</button><button class="view-records" id="view-sessions">Saved sessions <b>${state.sessions.length}</b></button><button class="student-records" id="view-students">Student records <b>${students.length}</b></button></div>
-    <p class="settings-tip">Tap any swimmer name on the main screen to edit it.</p>
+    <div class="data-actions"><button id="export-backup">Backup JSON</button><button id="export-csv">Export CSV</button><button id="import-backup">Restore backup</button><input class="sr-only" id="backup-file" type="file" accept="application/json,.json"></div>
+    <p class="settings-tip">Tap a swimmer name to rename their profile. Previous records remain connected.</p>
     <p class="app-version">Version ${APP_VERSION}</p>
     <div class="dialog-actions"><button class="dialog-secondary" data-close>Done</button></div>`;
   if (!dialog.open) dialog.showModal();
@@ -241,16 +272,63 @@ function showSettings() {
   dialog.querySelector('#save-session').addEventListener('click', saveSession);
   dialog.querySelector('#view-sessions').addEventListener('click', showSavedSessions);
   dialog.querySelector('#view-students').addEventListener('click', showStudentRecords);
+  dialog.querySelector('#export-backup').addEventListener('click', exportBackup);
+  dialog.querySelector('#export-csv').addEventListener('click', exportCsv);
+  dialog.querySelector('#import-backup').addEventListener('click', () => dialog.querySelector('#backup-file').click());
+  dialog.querySelector('#backup-file').addEventListener('change', importBackup);
   dialog.querySelectorAll('[data-setting]').forEach((button) => button.addEventListener('click', () => {
     const key = button.dataset.setting; state.settings[key] = !state.settings[key]; save(); showSettings();
   }));
   dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
 }
 
+function downloadFile(filename, content, type) {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([content], { type }));
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function exportBackup() {
+  const date = new Date().toISOString().slice(0, 10);
+  downloadFile(`swimtimer-backup-${date}.json`, JSON.stringify({ app: 'SwimTimer', version: APP_VERSION, exportedAt: Date.now(), data: state }, null, 2), 'application/json');
+}
+
+function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
+
+function exportCsv() {
+  const rows = [['Student', 'Distance (m)', 'Time', 'Milliseconds', 'Date', 'Stroke', 'Test / Set', 'Equipment', 'Notes', 'Laps']];
+  for (const session of state.sessions) for (const timer of session.timers) rows.push([
+    timer.name, savedTimerDistance(timer, session), formatTime(timer.elapsed), Math.round(timer.elapsed || 0), new Date(session.savedAt).toISOString(), timer.stroke || '', timer.test || '', timer.equipment || '', timer.notes || '', timer.laps.length,
+  ]);
+  downloadFile(`swimtimer-records-${new Date().toISOString().slice(0, 10)}.csv`, `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\n')}`, 'text/csv;charset=utf-8');
+}
+
+async function importBackup(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    const restored = parsed.data || parsed;
+    if (!Array.isArray(restored.timers) || !Array.isArray(restored.sessions)) throw new Error('Invalid backup');
+    if (!window.confirm('Replace current timers and records with this backup?')) { event.target.value = ''; return; }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(restored));
+    state = loadState();
+    render();
+    showSettings();
+  } catch {
+    window.alert('This backup file could not be restored.');
+    event.target.value = '';
+  }
+}
+
 function saveSession() {
   const now = Date.now();
   const timers = state.timers
-    .map((timer) => ({ name: timer.name, elapsed: currentElapsed(timer, now), distance: timerDistance(timer), laps: timer.laps.map((lap) => ({ ...lap })) }))
+    .map((timer) => ({ studentId: timer.studentId, name: timer.name, elapsed: currentElapsed(timer, now), distance: timerDistance(timer), laps: timer.laps.map((lap) => ({ ...lap })), stroke: '', test: '', equipment: '', notes: '' }))
     .filter((timer) => timer.elapsed > 0 || timer.laps.length || timer.distance > 0);
   if (!timers.length) return;
   state.sessions.unshift({ id: crypto.randomUUID(), savedAt: now, poolLength: poolLength(), timers });
@@ -259,19 +337,53 @@ function saveSession() {
   showSavedSessions();
 }
 
-function saveIndividualResult(timer) {
+function previousResults(studentId, distance) {
+  return state.sessions.flatMap((session) => session.timers.map((timer) => ({ session, timer })))
+    .filter((result) => result.timer.studentId === studentId && savedTimerDistance(result.timer, result.session) === distance && result.timer.elapsed > 0)
+    .sort((a, b) => b.session.savedAt - a.session.savedAt);
+}
+
+function showSaveResultForm(timer) {
+  if (isSaved(timer)) return;
+  const dialog = document.querySelector('#dialog');
+  dialog.innerHTML = `<form id="result-form"><h2>Save ${esc(timer.name)}</h2><div class="record-hero compact"><strong>${timerDistance(timer)}m</strong><b>${formatTime(currentElapsed(timer))}</b></div>
+    <div class="record-fields"><label>Stroke<select id="result-stroke"><option value="">Not specified</option><option>Freestyle</option><option>Backstroke</option><option>Breaststroke</option><option>Butterfly</option><option>Individual medley</option></select></label><label>Test / set<input id="result-test" maxlength="40" placeholder="e.g. Time trial"></label><label>Equipment<input id="result-equipment" maxlength="40" placeholder="e.g. Fins, paddles"></label><label class="wide">Notes<textarea id="result-notes" maxlength="200" rows="3" placeholder="Optional coaching notes"></textarea></label></div>
+    <div class="dialog-actions"><button type="button" class="dialog-secondary" data-close>Cancel</button><button class="dialog-primary">Save record</button></div></form>`;
+  dialog.showModal();
+  dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
+  dialog.querySelector('#result-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    saveIndividualResult(timer, {
+      stroke: dialog.querySelector('#result-stroke').value,
+      test: dialog.querySelector('#result-test').value.trim(),
+      equipment: dialog.querySelector('#result-equipment').value.trim(),
+      notes: dialog.querySelector('#result-notes').value.trim(),
+    });
+  });
+}
+
+function saveIndividualResult(timer, details = {}) {
   const now = Date.now();
-  const result = { name: timer.name, elapsed: currentElapsed(timer, now), distance: timerDistance(timer), laps: timer.laps.map((lap) => ({ ...lap })) };
+  const signature = resultSignature(timer);
+  if (timer.lastSavedSignature === signature) return;
+  const distance = timerDistance(timer);
+  const prior = previousResults(timer.studentId, distance);
+  const previous = prior[0]?.timer.elapsed || 0;
+  const previousBest = prior.reduce((best, item) => Math.min(best, item.timer.elapsed), Number.POSITIVE_INFINITY);
+  const result = { studentId: timer.studentId, name: timer.name, elapsed: currentElapsed(timer, now), distance, laps: timer.laps.map((lap) => ({ ...lap })), ...details };
   if (result.elapsed <= 0 && result.distance <= 0 && !result.laps.length) return;
   state.sessions.unshift({ id: crypto.randomUUID(), savedAt: now, poolLength: poolLength(), individual: true, timers: [result] });
   state.sessions = state.sessions.slice(0, 100);
+  timer.lastSavedSignature = signature;
   save();
   const dialog = document.querySelector('#dialog');
-  const studentKey = String(timer.name || 'Unnamed').trim().toLocaleLowerCase();
-  dialog.innerHTML = `<h2>${esc(timer.name)} saved</h2><p>${formatTime(result.elapsed)} · ${result.distance}m · ${result.laps.length} laps</p><div class="dialog-actions"><button class="dialog-secondary" data-close>Done</button><button class="dialog-primary" id="view-saved-student">View record</button></div>`;
+  const isPb = result.elapsed > 0 && result.elapsed < previousBest;
+  const delta = previous > 0 ? result.elapsed - previous : 0;
+  const comparison = !previous ? 'First result at this distance' : isPb ? `New PB · ${formatTime(Math.abs(previousBest - result.elapsed))} faster` : `${delta <= 0 ? '▲' : '▼'} ${formatTime(Math.abs(delta))} ${delta <= 0 ? 'faster' : 'slower'} than last`;
+  dialog.innerHTML = `<h2>${esc(timer.name)} saved</h2><div class="record-hero"><strong>${result.distance}m</strong><b>${formatTime(result.elapsed)}</b></div><p class="performance-note ${isPb ? 'pb' : ''}">${comparison}</p><div class="dialog-actions"><button class="dialog-secondary" data-close>Done</button><button class="dialog-primary" id="view-saved-student">View record</button></div>`;
   dialog.showModal();
-  dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
-  dialog.querySelector('#view-saved-student').addEventListener('click', () => showStudentHistory(studentKey));
+  dialog.querySelector('[data-close]').addEventListener('click', () => { dialog.close(); render(); });
+  dialog.querySelector('#view-saved-student').addEventListener('click', () => showStudentHistory(timer.studentId));
 }
 
 function showSavedSessions() {
@@ -291,10 +403,11 @@ function showSavedSessions() {
 
 function getStudentRecords() {
   const grouped = new Map();
+  const profileNames = new Map(state.timers.map((timer) => [timer.studentId, timer.name]));
   for (const session of state.sessions) {
     session.timers.forEach((timer, timerIndex) => {
-      const key = String(timer.name || 'Unnamed').trim().toLocaleLowerCase();
-      if (!grouped.has(key)) grouped.set(key, { key, name: timer.name || 'Unnamed', results: [] });
+      const key = timer.studentId || `legacy-${normaliseName(timer.name)}`;
+      if (!grouped.has(key)) grouped.set(key, { key, name: profileNames.get(key) || timer.name || 'Unnamed', results: [] });
       grouped.get(key).results.push({ session, timer, timerIndex });
     });
   }
@@ -310,7 +423,8 @@ function showStudentRecords() {
     <div class="student-list">
       ${students.length ? students.map((student) => {
         const metres = student.results.reduce((sum, result) => sum + savedTimerDistance(result.timer, result.session), 0);
-        return `<button class="student-card" data-student="${esc(student.key)}"><strong>${esc(student.name)}</strong><span>${student.results.length} record${student.results.length === 1 ? '' : 's'} · ${metres}m total</span></button>`;
+        const pbCount = new Set(student.results.filter((result) => result.timer.elapsed > 0).map((result) => savedTimerDistance(result.timer, result.session))).size;
+        return `<button class="student-card" data-student="${esc(student.key)}"><strong>${esc(student.name)}</strong><span>${student.results.length} record${student.results.length === 1 ? '' : 's'} · ${pbCount} distance${pbCount === 1 ? '' : 's'} · ${metres}m total</span></button>`;
       }).join('') : '<p class="empty-state">Save a session to create student records.</p>'}
     </div>
     <div class="dialog-actions"><button class="dialog-secondary" id="students-back">Back</button></div>`;
@@ -337,7 +451,7 @@ function showStudentHistory(key) {
   const dialog = document.querySelector('#dialog');
   dialog.innerHTML = `<h2>${esc(student.name)}</h2><p class="dialog-subtitle">Sorted by distance · fastest time first</p>
     <div class="student-results">
-      ${distanceGroups.map((group) => `<section class="distance-record-group"><h3><strong>${group.distance}m</strong><span>${group.results.length} record${group.results.length === 1 ? '' : 's'}</span></h3><div class="distance-results">${group.results.map((result) => `<div class="student-result-row"><button class="student-result" data-result-session="${result.session.id}" data-result-timer="${result.timerIndex}"><strong class="result-time">${formatTime(result.timer.elapsed)}</strong><small>${formatSavedAt(result.session.savedAt)} · ${result.timer.laps.length} laps</small></button><button class="delete-record" data-delete-session="${result.session.id}" data-delete-timer="${result.timerIndex}" aria-label="Delete ${esc(student.name)} record from ${esc(formatSavedAt(result.session.savedAt))}">×</button></div>`).join('')}</div></section>`).join('')}
+      ${distanceGroups.map((group) => `<section class="distance-record-group"><h3><strong>${group.distance}m</strong><span>${group.results.length} record${group.results.length === 1 ? '' : 's'}</span></h3><div class="distance-results">${group.results.map((result, index) => `<div class="student-result-row"><button class="student-result" data-result-session="${result.session.id}" data-result-timer="${result.timerIndex}"><span class="result-title"><strong class="result-time">${formatTime(result.timer.elapsed)}</strong>${index === 0 && result.timer.elapsed > 0 ? '<em>PB</em>' : ''}</span><small>${formatSavedAt(result.session.savedAt)} · ${result.timer.stroke ? `${esc(result.timer.stroke)} · ` : ''}${result.timer.laps.length} laps</small></button><button class="delete-record" data-delete-session="${result.session.id}" data-delete-timer="${result.timerIndex}" aria-label="Delete ${esc(student.name)} record from ${esc(formatSavedAt(result.session.savedAt))}">×</button></div>`).join('')}</div></section>`).join('')}
     </div>
     <div class="dialog-actions"><button class="dialog-secondary" id="history-back">Back</button></div>`;
   dialog.querySelectorAll('[data-result-session]').forEach((button) => button.addEventListener('click', () => showSavedSwimmer(button.dataset.resultSession, Number(button.dataset.resultTimer), key)));
@@ -381,7 +495,8 @@ function showSavedSwimmer(sessionId, timerIndex, studentKey = null) {
   const timer = session?.timers?.[timerIndex];
   if (!session || !timer) return;
   const dialog = document.querySelector('#dialog');
-  dialog.innerHTML = `<h2>${esc(timer.name)}</h2><div class="record-hero"><strong>${savedTimerDistance(timer, session)}m</strong><b>${formatTime(timer.elapsed)}</b></div><p class="dialog-subtitle">${formatSavedAt(session.savedAt)} · ${timer.laps.length} laps</p>
+  const details = [timer.stroke, timer.test, timer.equipment].filter(Boolean);
+  dialog.innerHTML = `<h2>${esc(timer.name)}</h2><div class="record-hero"><strong>${savedTimerDistance(timer, session)}m</strong><b>${formatTime(timer.elapsed)}</b></div><p class="dialog-subtitle">${formatSavedAt(session.savedAt)} · ${timer.laps.length} laps${details.length ? ` · ${details.map(esc).join(' · ')}` : ''}</p>${timer.notes ? `<p class="record-notes">${esc(timer.notes)}</p>` : ''}
     <div class="lap-list" role="list">
       ${timer.laps.length ? timer.laps.map((lap, index) => `<div class="lap-row" role="listitem"><strong>Lap ${index + 1}<small>${(index + 1) * session.poolLength}m</small></strong><span><small>Lap time</small><b>${formatTime(lap.split)}</b></span><span><small>Total</small><b>${formatTime(lap.at)}</b></span></div>`).join('') : '<p class="empty-state">No laps recorded.</p>'}
     </div>

@@ -61,6 +61,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--yellow); ou
 .lap-button { border: 2px solid var(--yellow); color: var(--yellow); }
 .reset-button { border: 2px solid var(--line); color: #b2bfd0; }
 .save-button { border: 1px solid var(--aqua); color: var(--aqua); background: rgba(32,207,238,.08) !important; }
+.save-button.saved { border-color: #3d7868; color: #72d8b8; background: rgba(63,151,123,.12) !important; }
 .card-actions button:disabled { opacity: .32; }
 .card-actions button:active { transform: scale(.96); }
 
@@ -105,6 +106,9 @@ dialog p { color: var(--muted); line-height: 1.4; }
 .distance-entry { display: grid; gap: 8px; margin-top: 16px; color: var(--muted); font-size: .82rem; }
 .distance-entry > span:last-child { display: flex; align-items: center; gap: 8px; }
 .distance-entry input { width: 100%; height: 52px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--text); background: var(--bg); text-align: right; font-size: 1.2rem; font-weight: 850; }
+.distance-presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin: 16px 0 4px; }
+.distance-presets button { min-height: 44px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--bg); font-weight: 850; }
+.distance-presets button.active { border-color: var(--aqua); color: #032235; background: var(--aqua); }
 .records-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
 .records-actions button { min-height: 48px; padding: 8px; border-radius: 10px; font-weight: 850; }
 .save-records { border: 0; color: #032235; background: var(--aqua); }
@@ -112,6 +116,8 @@ dialog p { color: var(--muted); line-height: 1.4; }
 .view-records { border: 1px solid var(--line); color: var(--text); background: var(--surface-2); }
 .view-records b, .student-records b { display: inline-grid; min-width: 22px; height: 22px; margin-left: 4px; place-items: center; border-radius: 20px; color: var(--aqua); background: var(--bg); }
 .student-records { grid-column: 1 / -1; border: 1px solid var(--aqua); color: var(--aqua); background: rgba(32,207,238,.07); }
+.data-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; padding-top: 9px; }
+.data-actions button { min-height: 42px; padding: 6px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); background: var(--bg); font-size: .72rem; font-weight: 800; }
 .lap-list { max-height: min(52dvh, 420px); margin-top: 15px; overflow-y: auto; border-top: 1px solid var(--line); }
 .lap-row { display: grid; grid-template-columns: 64px 1fr 1fr; align-items: center; gap: 10px; padding: 11px 2px; border-bottom: 1px solid rgba(59,82,107,.65); }
 .lap-row strong { display: grid; gap: 2px; color: var(--aqua); font-size: .84rem; }
@@ -129,6 +135,8 @@ dialog p { color: var(--muted); line-height: 1.4; }
 .saved-swimmer small { grid-column: 1 / -1; }
 .student-result { align-content: center; }
 .student-result .result-time { color: var(--text); font-family: ui-monospace, "SFMono-Regular", monospace; font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+.result-title { display: flex; align-items: center; gap: 8px; }
+.result-title em { padding: 3px 7px; border-radius: 20px; color: #032235; background: var(--yellow); font-size: .66rem; font-style: normal; font-weight: 950; }
 .student-result-row { display: grid; grid-template-columns: minmax(0,1fr) 46px; align-items: stretch; gap: 7px; }
 .delete-record { border: 1px solid rgba(255,77,88,.6); border-radius: 11px; color: var(--red); background: rgba(255,77,88,.08); font-size: 1.4rem; font-weight: 500; }
 .delete-warning { margin-bottom: 0; color: #ff9aa0; font-size: .84rem; }
@@ -141,6 +149,16 @@ dialog p { color: var(--muted); line-height: 1.4; }
 .record-hero { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 12px 0 8px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
 .record-hero strong { color: var(--aqua); font-size: 1.75rem; letter-spacing: -.04em; }
 .record-hero b { font-family: ui-monospace, "SFMono-Regular", monospace; font-size: 1.55rem; font-variant-numeric: tabular-nums; }
+.record-hero.compact { margin-top: 10px; padding: 11px 13px; }
+.performance-note { margin: 0; padding: 10px 12px; border-radius: 10px; text-align: center; color: var(--text); background: var(--bg); font-weight: 800; }
+.performance-note.pb { color: #171400; background: var(--yellow); }
+.record-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.record-fields label { display: grid; gap: 5px; color: var(--muted); font-size: .74rem; font-weight: 750; }
+.record-fields label.wide { grid-column: 1 / -1; }
+.record-fields input, .record-fields select, .record-fields textarea { width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--bg); font: inherit; }
+.record-fields input, .record-fields select { height: 44px; }
+.record-fields textarea { resize: vertical; }
+.record-notes { margin: 12px 0; padding: 12px; border-left: 3px solid var(--aqua); color: var(--text); background: var(--bg); white-space: pre-wrap; }
 .empty-state { padding: 22px 0; text-align: center; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
