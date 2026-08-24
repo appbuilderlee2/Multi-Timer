@@ -130,6 +130,9 @@ dialog p { color: var(--muted); line-height: 1.4; }
 .student-result { grid-template-columns: 1fr auto; align-items: center; }
 .student-result span { font-family: ui-monospace, "SFMono-Regular", monospace; font-weight: 800; }
 .student-result small { grid-column: 1 / -1; }
+.student-result-row { display: grid; grid-template-columns: minmax(0,1fr) 46px; align-items: stretch; gap: 7px; }
+.delete-record { border: 1px solid rgba(255,77,88,.6); border-radius: 11px; color: var(--red); background: rgba(255,77,88,.08); font-size: 1.4rem; font-weight: 500; }
+.delete-warning { margin-bottom: 0; color: #ff9aa0; font-size: .84rem; }
 .empty-state { padding: 22px 0; text-align: center; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 

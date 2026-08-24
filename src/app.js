@@ -1,6 +1,6 @@
 import './styles.css';
 
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.6.0';
 const STORAGE_KEY = 'swimtimer-independent-v2';
 const names = ['Anna', 'Ben', 'Chloe', 'David', 'Eva', 'Frank', 'Grace', 'Henry', 'Ivy', 'Jack'];
 const makeTimer = (name) => ({ id: crypto.randomUUID(), name, status: 'idle', elapsed: 0, startedAt: null, laps: [], distance: 0 });
@@ -325,11 +325,30 @@ function showStudentHistory(key) {
   const dialog = document.querySelector('#dialog');
   dialog.innerHTML = `<h2>${esc(student.name)}</h2><p class="dialog-subtitle">${student.results.length} saved record${student.results.length === 1 ? '' : 's'}</p>
     <div class="student-results">
-      ${student.results.map((result) => `<button class="student-result" data-result-session="${result.session.id}" data-result-timer="${result.timerIndex}"><strong>${formatSavedAt(result.session.savedAt)}</strong><span>${formatTime(result.timer.elapsed)}</span><small>${savedTimerDistance(result.timer, result.session)}m · ${result.timer.laps.length} laps</small></button>`).join('')}
+      ${student.results.map((result) => `<div class="student-result-row"><button class="student-result" data-result-session="${result.session.id}" data-result-timer="${result.timerIndex}"><strong>${formatSavedAt(result.session.savedAt)}</strong><span>${formatTime(result.timer.elapsed)}</span><small>${savedTimerDistance(result.timer, result.session)}m · ${result.timer.laps.length} laps</small></button><button class="delete-record" data-delete-session="${result.session.id}" data-delete-timer="${result.timerIndex}" aria-label="Delete ${esc(student.name)} record from ${esc(formatSavedAt(result.session.savedAt))}">×</button></div>`).join('')}
     </div>
     <div class="dialog-actions"><button class="dialog-secondary" id="history-back">Back</button></div>`;
   dialog.querySelectorAll('[data-result-session]').forEach((button) => button.addEventListener('click', () => showSavedSwimmer(button.dataset.resultSession, Number(button.dataset.resultTimer), key)));
+  dialog.querySelectorAll('[data-delete-session]').forEach((button) => button.addEventListener('click', () => confirmDeleteRecord(button.dataset.deleteSession, Number(button.dataset.deleteTimer), key)));
   dialog.querySelector('#history-back').addEventListener('click', showStudentRecords);
+}
+
+function confirmDeleteRecord(sessionId, timerIndex, studentKey) {
+  const session = state.sessions.find((item) => item.id === sessionId);
+  const timer = session?.timers?.[timerIndex];
+  if (!session || !timer) return;
+  const dialog = document.querySelector('#dialog');
+  dialog.innerHTML = `<h2>Delete ${esc(timer.name)} record?</h2><p>${formatSavedAt(session.savedAt)} · ${formatTime(timer.elapsed)} · ${savedTimerDistance(timer, session)}m</p><p class="delete-warning">This cannot be undone.</p><div class="dialog-actions"><button class="dialog-secondary" id="cancel-delete">Cancel</button><button class="dialog-danger" id="confirm-delete-record">Delete record</button></div>`;
+  dialog.querySelector('#cancel-delete').addEventListener('click', () => showStudentHistory(studentKey));
+  dialog.querySelector('#confirm-delete-record').addEventListener('click', () => {
+    const sessionIndex = state.sessions.findIndex((item) => item.id === sessionId);
+    if (sessionIndex < 0) return;
+    state.sessions[sessionIndex].timers.splice(timerIndex, 1);
+    if (!state.sessions[sessionIndex].timers.length) state.sessions.splice(sessionIndex, 1);
+    save();
+    if (getStudentRecords().some((student) => student.key === studentKey)) showStudentHistory(studentKey);
+    else showStudentRecords();
+  });
 }
 
 function showSavedSession(id) {
