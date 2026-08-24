@@ -1,6 +1,6 @@
 import './styles.css';
 
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.4.0';
 const STORAGE_KEY = 'swimtimer-independent-v2';
 const names = ['Anna', 'Ben', 'Chloe', 'David', 'Eva', 'Frank', 'Grace', 'Henry', 'Ivy', 'Jack'];
 const makeTimer = (name) => ({ id: crypto.randomUUID(), name, status: 'idle', elapsed: 0, startedAt: null, laps: [], distance: 0 });
@@ -210,12 +210,13 @@ function showDistanceInput(id) {
 function showSettings() {
   const dialog = document.querySelector('#dialog');
   const hasResults = state.timers.some((timer) => currentElapsed(timer) > 0 || timer.laps.length || timerDistance(timer) > 0);
+  const students = getStudentRecords();
   dialog.innerHTML = `<h2>Manage timers</h2>
     <div class="manage-count"><button id="remove-timer" aria-label="Remove last timer">−</button><strong>${state.timers.length} swimmers</strong><button id="add-timer" aria-label="Add timer">＋</button></div>
     <div class="setting-row"><label for="pool-length">Pool length</label><span class="distance-input"><input id="pool-length" type="number" min="1" max="500" step="1" inputmode="numeric" value="${poolLength()}"><b>m</b></span></div>
     <div class="setting-row"><span>Vibrate on lap</span><button class="switch ${state.settings.vibration ? 'on' : ''}" data-setting="vibration" aria-label="Toggle vibration"></button></div>
     <div class="setting-row"><span>Keep screen awake</span><button class="switch ${state.settings.keepAwake ? 'on' : ''}" data-setting="keepAwake" aria-label="Toggle screen wake lock"></button></div>
-    <div class="records-actions"><button class="save-records" id="save-session" ${hasResults ? '' : 'disabled'}>Save current session</button><button class="view-records" id="view-sessions">Saved sessions <b>${state.sessions.length}</b></button></div>
+    <div class="records-actions"><button class="save-records" id="save-session" ${hasResults ? '' : 'disabled'}>Save current session</button><button class="view-records" id="view-sessions">Saved sessions <b>${state.sessions.length}</b></button><button class="student-records" id="view-students">Student records <b>${students.length}</b></button></div>
     <p class="settings-tip">Tap any swimmer name on the main screen to edit it.</p>
     <p class="app-version">Version ${APP_VERSION}</p>
     <div class="dialog-actions"><button class="dialog-secondary" data-close>Done</button></div>`;
@@ -236,6 +237,7 @@ function showSettings() {
   });
   dialog.querySelector('#save-session').addEventListener('click', saveSession);
   dialog.querySelector('#view-sessions').addEventListener('click', showSavedSessions);
+  dialog.querySelector('#view-students').addEventListener('click', showStudentRecords);
   dialog.querySelectorAll('[data-setting]').forEach((button) => button.addEventListener('click', () => {
     const key = button.dataset.setting; state.settings[key] = !state.settings[key]; save(); showSettings();
   }));
@@ -269,6 +271,49 @@ function showSavedSessions() {
   dialog.querySelector('#records-back').addEventListener('click', showSettings);
 }
 
+function getStudentRecords() {
+  const grouped = new Map();
+  for (const session of state.sessions) {
+    session.timers.forEach((timer, timerIndex) => {
+      const key = String(timer.name || 'Unnamed').trim().toLocaleLowerCase();
+      if (!grouped.has(key)) grouped.set(key, { key, name: timer.name || 'Unnamed', results: [] });
+      grouped.get(key).results.push({ session, timer, timerIndex });
+    });
+  }
+  return [...grouped.values()]
+    .map((student) => ({ ...student, results: student.results.sort((a, b) => b.session.savedAt - a.session.savedAt) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function showStudentRecords() {
+  const students = getStudentRecords();
+  const dialog = document.querySelector('#dialog');
+  dialog.innerHTML = `<h2>Student records</h2><p class="dialog-subtitle">All saved results grouped by student.</p>
+    <div class="student-list">
+      ${students.length ? students.map((student) => {
+        const metres = student.results.reduce((sum, result) => sum + savedTimerDistance(result.timer, result.session), 0);
+        return `<button class="student-card" data-student="${esc(student.key)}"><strong>${esc(student.name)}</strong><span>${student.results.length} record${student.results.length === 1 ? '' : 's'} · ${metres}m total</span></button>`;
+      }).join('') : '<p class="empty-state">Save a session to create student records.</p>'}
+    </div>
+    <div class="dialog-actions"><button class="dialog-secondary" id="students-back">Back</button></div>`;
+  if (!dialog.open) dialog.showModal();
+  dialog.querySelectorAll('[data-student]').forEach((button) => button.addEventListener('click', () => showStudentHistory(button.dataset.student)));
+  dialog.querySelector('#students-back').addEventListener('click', showSettings);
+}
+
+function showStudentHistory(key) {
+  const student = getStudentRecords().find((item) => item.key === key);
+  if (!student) return;
+  const dialog = document.querySelector('#dialog');
+  dialog.innerHTML = `<h2>${esc(student.name)}</h2><p class="dialog-subtitle">${student.results.length} saved record${student.results.length === 1 ? '' : 's'}</p>
+    <div class="student-results">
+      ${student.results.map((result) => `<button class="student-result" data-result-session="${result.session.id}" data-result-timer="${result.timerIndex}"><strong>${formatSavedAt(result.session.savedAt)}</strong><span>${formatTime(result.timer.elapsed)}</span><small>${savedTimerDistance(result.timer, result.session)}m · ${result.timer.laps.length} laps</small></button>`).join('')}
+    </div>
+    <div class="dialog-actions"><button class="dialog-secondary" id="history-back">Back</button></div>`;
+  dialog.querySelectorAll('[data-result-session]').forEach((button) => button.addEventListener('click', () => showSavedSwimmer(button.dataset.resultSession, Number(button.dataset.resultTimer), key)));
+  dialog.querySelector('#history-back').addEventListener('click', showStudentRecords);
+}
+
 function showSavedSession(id) {
   const session = state.sessions.find((item) => item.id === id);
   if (!session) return;
@@ -282,7 +327,7 @@ function showSavedSession(id) {
   dialog.querySelector('#session-back').addEventListener('click', showSavedSessions);
 }
 
-function showSavedSwimmer(sessionId, timerIndex) {
+function showSavedSwimmer(sessionId, timerIndex, studentKey = null) {
   const session = state.sessions.find((item) => item.id === sessionId);
   const timer = session?.timers?.[timerIndex];
   if (!session || !timer) return;
@@ -292,7 +337,7 @@ function showSavedSwimmer(sessionId, timerIndex) {
       ${timer.laps.length ? timer.laps.map((lap, index) => `<div class="lap-row" role="listitem"><strong>Lap ${index + 1}<small>${(index + 1) * session.poolLength}m</small></strong><span><small>Lap time</small><b>${formatTime(lap.split)}</b></span><span><small>Total</small><b>${formatTime(lap.at)}</b></span></div>`).join('') : '<p class="empty-state">No laps recorded.</p>'}
     </div>
     <div class="dialog-actions"><button class="dialog-secondary" id="swimmer-back">Back</button></div>`;
-  dialog.querySelector('#swimmer-back').addEventListener('click', () => showSavedSession(sessionId));
+  dialog.querySelector('#swimmer-back').addEventListener('click', () => studentKey ? showStudentHistory(studentKey) : showSavedSession(sessionId));
 }
 
 async function requestWakeLock() {
