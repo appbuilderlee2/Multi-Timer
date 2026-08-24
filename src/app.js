@@ -1,6 +1,6 @@
 import './styles.css';
 
-const APP_VERSION = '2.4.0';
+const APP_VERSION = '2.5.0';
 const STORAGE_KEY = 'swimtimer-independent-v2';
 const names = ['Anna', 'Ben', 'Chloe', 'David', 'Eva', 'Frank', 'Grace', 'Henry', 'Ivy', 'Jack'];
 const makeTimer = (name) => ({ id: crypto.randomUUID(), name, status: 'idle', elapsed: 0, startedAt: null, laps: [], distance: 0 });
@@ -84,13 +84,15 @@ function timerCard(timer, index) {
   const latest = timer.laps.at(-1);
   const running = timer.status === 'running';
   const hasTime = currentElapsed(timer) > 0;
+  const hasResult = hasTime || timer.laps.length > 0 || timerDistance(timer) > 0;
   return `<article class="timer-card ${running ? 'running' : ''}" data-card="${timer.id}">
     <div class="card-head"><span class="lane-number">${index + 1}</span><button class="timer-name" data-name="${timer.id}" aria-label="Edit ${esc(timer.name)}">${esc(timer.name)}</button><span class="status-dot" aria-label="${running ? 'Running' : timer.status === 'paused' ? 'Stopped' : 'Idle'}"></span></div>
     <div class="elapsed" data-clock="${timer.id}">${formatTime(currentElapsed(timer))}</div>
     <div class="timer-meta"><span class="meta-block"><small>Latest</small><b>${latest ? formatTime(latest.split) : '00:00.00'}</b></span><button class="meta-block lap-summary" data-laps="${timer.id}" aria-label="View ${esc(timer.name)} lap times" ${timer.laps.length ? '' : 'disabled'}><small>Laps</small><b>${timer.laps.length}</b></button><button class="meta-block distance-summary" data-distance="${timer.id}" aria-label="Set ${esc(timer.name)} distance"><small>Distance</small><b>${timerDistance(timer)}m</b></button></div>
     <div class="card-actions">
       <button class="${running ? 'stop-button' : 'start-button'}" data-action="${running ? 'stop' : 'start'}" data-id="${timer.id}">${running ? 'STOP' : 'START'}</button>
-      <button class="${running ? 'lap-button' : 'reset-button'}" data-action="${running ? 'lap' : 'reset'}" data-id="${timer.id}" ${!running && !hasTime ? 'disabled' : ''}>${running ? 'LAP' : 'RESET'}</button>
+      <button class="${running ? 'lap-button' : 'reset-button'}" data-action="${running ? 'lap' : 'reset'}" data-id="${timer.id}" ${!running && !hasResult ? 'disabled' : ''}>${running ? 'LAP' : 'RESET'}</button>
+      <button class="save-button" data-action="save" data-id="${timer.id}" ${running || !hasResult ? 'disabled' : ''}>SAVE</button>
     </div>
   </article>`;
 }
@@ -130,6 +132,7 @@ function timerAction(id, action) {
     if (!state.timers.some((item) => item.status === 'running')) releaseWakeLock();
     save(); render(); return;
   }
+  if (action === 'save') { saveIndividualResult(timer); return; }
   if (!state.timers.some((item) => item.status === 'running')) releaseWakeLock();
   save(); render();
 }
@@ -254,6 +257,21 @@ function saveSession() {
   state.sessions = state.sessions.slice(0, 100);
   save();
   showSavedSessions();
+}
+
+function saveIndividualResult(timer) {
+  const now = Date.now();
+  const result = { name: timer.name, elapsed: currentElapsed(timer, now), distance: timerDistance(timer), laps: timer.laps.map((lap) => ({ ...lap })) };
+  if (result.elapsed <= 0 && result.distance <= 0 && !result.laps.length) return;
+  state.sessions.unshift({ id: crypto.randomUUID(), savedAt: now, poolLength: poolLength(), individual: true, timers: [result] });
+  state.sessions = state.sessions.slice(0, 100);
+  save();
+  const dialog = document.querySelector('#dialog');
+  const studentKey = String(timer.name || 'Unnamed').trim().toLocaleLowerCase();
+  dialog.innerHTML = `<h2>${esc(timer.name)} saved</h2><p>${formatTime(result.elapsed)} · ${result.distance}m · ${result.laps.length} laps</p><div class="dialog-actions"><button class="dialog-secondary" data-close>Done</button><button class="dialog-primary" id="view-saved-student">View record</button></div>`;
+  dialog.showModal();
+  dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
+  dialog.querySelector('#view-saved-student').addEventListener('click', () => showStudentHistory(studentKey));
 }
 
 function showSavedSessions() {
