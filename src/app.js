@@ -1,6 +1,6 @@
 import './styles.css';
 
-const APP_VERSION = '2.6.0';
+const APP_VERSION = '2.7.0';
 const STORAGE_KEY = 'swimtimer-independent-v2';
 const names = ['Anna', 'Ben', 'Chloe', 'David', 'Eva', 'Frank', 'Grace', 'Henry', 'Ivy', 'Jack'];
 const makeTimer = (name) => ({ id: crypto.randomUUID(), name, status: 'idle', elapsed: 0, startedAt: null, laps: [], distance: 0 });
@@ -322,10 +322,22 @@ function showStudentRecords() {
 function showStudentHistory(key) {
   const student = getStudentRecords().find((item) => item.key === key);
   if (!student) return;
+  const grouped = new Map();
+  for (const result of student.results) {
+    const distance = savedTimerDistance(result.timer, result.session);
+    if (!grouped.has(distance)) grouped.set(distance, []);
+    grouped.get(distance).push(result);
+  }
+  const distanceGroups = [...grouped.entries()]
+    .sort(([distanceA], [distanceB]) => distanceA - distanceB)
+    .map(([distance, results]) => ({
+      distance,
+      results: results.sort((a, b) => (a.timer.elapsed || Number.MAX_SAFE_INTEGER) - (b.timer.elapsed || Number.MAX_SAFE_INTEGER) || b.session.savedAt - a.session.savedAt),
+    }));
   const dialog = document.querySelector('#dialog');
-  dialog.innerHTML = `<h2>${esc(student.name)}</h2><p class="dialog-subtitle">${student.results.length} saved record${student.results.length === 1 ? '' : 's'}</p>
+  dialog.innerHTML = `<h2>${esc(student.name)}</h2><p class="dialog-subtitle">Sorted by distance · fastest time first</p>
     <div class="student-results">
-      ${student.results.map((result) => `<div class="student-result-row"><button class="student-result" data-result-session="${result.session.id}" data-result-timer="${result.timerIndex}"><strong>${formatSavedAt(result.session.savedAt)}</strong><span>${formatTime(result.timer.elapsed)}</span><small>${savedTimerDistance(result.timer, result.session)}m · ${result.timer.laps.length} laps</small></button><button class="delete-record" data-delete-session="${result.session.id}" data-delete-timer="${result.timerIndex}" aria-label="Delete ${esc(student.name)} record from ${esc(formatSavedAt(result.session.savedAt))}">×</button></div>`).join('')}
+      ${distanceGroups.map((group) => `<section class="distance-record-group"><h3><strong>${group.distance}m</strong><span>${group.results.length} record${group.results.length === 1 ? '' : 's'}</span></h3><div class="distance-results">${group.results.map((result) => `<div class="student-result-row"><button class="student-result" data-result-session="${result.session.id}" data-result-timer="${result.timerIndex}"><strong class="result-time">${formatTime(result.timer.elapsed)}</strong><small>${formatSavedAt(result.session.savedAt)} · ${result.timer.laps.length} laps</small></button><button class="delete-record" data-delete-session="${result.session.id}" data-delete-timer="${result.timerIndex}" aria-label="Delete ${esc(student.name)} record from ${esc(formatSavedAt(result.session.savedAt))}">×</button></div>`).join('')}</div></section>`).join('')}
     </div>
     <div class="dialog-actions"><button class="dialog-secondary" id="history-back">Back</button></div>`;
   dialog.querySelectorAll('[data-result-session]').forEach((button) => button.addEventListener('click', () => showSavedSwimmer(button.dataset.resultSession, Number(button.dataset.resultTimer), key)));
@@ -369,7 +381,7 @@ function showSavedSwimmer(sessionId, timerIndex, studentKey = null) {
   const timer = session?.timers?.[timerIndex];
   if (!session || !timer) return;
   const dialog = document.querySelector('#dialog');
-  dialog.innerHTML = `<h2>${esc(timer.name)}</h2><p class="dialog-subtitle">${formatSavedAt(session.savedAt)} · ${formatTime(timer.elapsed)} · ${savedTimerDistance(timer, session)}m</p>
+  dialog.innerHTML = `<h2>${esc(timer.name)}</h2><div class="record-hero"><strong>${savedTimerDistance(timer, session)}m</strong><b>${formatTime(timer.elapsed)}</b></div><p class="dialog-subtitle">${formatSavedAt(session.savedAt)} · ${timer.laps.length} laps</p>
     <div class="lap-list" role="list">
       ${timer.laps.length ? timer.laps.map((lap, index) => `<div class="lap-row" role="listitem"><strong>Lap ${index + 1}<small>${(index + 1) * session.poolLength}m</small></strong><span><small>Lap time</small><b>${formatTime(lap.split)}</b></span><span><small>Total</small><b>${formatTime(lap.at)}</b></span></div>`).join('') : '<p class="empty-state">No laps recorded.</p>'}
     </div>
