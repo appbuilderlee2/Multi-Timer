@@ -1,0 +1,6 @@
+node_modules/
+dist/
+generated_images/
+upload/
+*.zip
+.DS_Store
