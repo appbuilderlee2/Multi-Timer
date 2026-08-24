@@ -1,5 +1,6 @@
 import './styles.css';
 
+const APP_VERSION = '2.1.0';
 const STORAGE_KEY = 'swimtimer-independent-v2';
 const names = ['Anna', 'Ben', 'Chloe', 'David', 'Eva', 'Frank', 'Grace', 'Henry', 'Ivy', 'Jack'];
 const makeTimer = (name) => ({ id: crypto.randomUUID(), name, status: 'idle', elapsed: 0, startedAt: null, laps: [] });
@@ -59,6 +60,7 @@ function render() {
     state.view = button.dataset.view; save(); render();
   }));
   document.querySelectorAll('[data-name]').forEach((button) => button.addEventListener('click', () => editName(button.dataset.name)));
+  document.querySelectorAll('[data-laps]').forEach((button) => button.addEventListener('click', () => showLaps(button.dataset.laps)));
   document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => timerAction(button.dataset.id, button.dataset.action)));
   document.querySelector('#all-start').addEventListener('click', startAll);
   document.querySelector('#all-stop').addEventListener('click', stopAll);
@@ -74,7 +76,7 @@ function timerCard(timer, index) {
   return `<article class="timer-card ${running ? 'running' : ''}" data-card="${timer.id}">
     <div class="card-head"><span class="lane-number">${index + 1}</span><button class="timer-name" data-name="${timer.id}" aria-label="Edit ${esc(timer.name)}">${esc(timer.name)}</button><span class="status-dot" aria-label="${running ? 'Running' : timer.status === 'paused' ? 'Stopped' : 'Idle'}"></span></div>
     <div class="elapsed" data-clock="${timer.id}">${formatTime(currentElapsed(timer))}</div>
-    <div class="timer-meta"><span><small>Latest</small><b>${latest ? formatTime(latest.split) : '00:00.00'}</b></span><span><small>Laps</small><b>${timer.laps.length}</b></span></div>
+    <div class="timer-meta"><span class="meta-block"><small>Latest</small><b>${latest ? formatTime(latest.split) : '00:00.00'}</b></span><button class="meta-block lap-summary" data-laps="${timer.id}" aria-label="View ${esc(timer.name)} lap times" ${timer.laps.length ? '' : 'disabled'}><small>Laps</small><b>${timer.laps.length}</b></button></div>
     <div class="card-actions">
       <button class="${running ? 'stop-button' : 'start-button'}" data-action="${running ? 'stop' : 'start'}" data-id="${timer.id}">${running ? 'STOP' : 'START'}</button>
       <button class="${running ? 'lap-button' : 'reset-button'}" data-action="${running ? 'lap' : 'reset'}" data-id="${timer.id}" ${!running && !hasTime ? 'disabled' : ''}>${running ? 'LAP' : 'RESET'}</button>
@@ -165,6 +167,19 @@ function editName(id) {
   });
 }
 
+function showLaps(id) {
+  const timer = state.timers.find((item) => item.id === id);
+  if (!timer?.laps.length) return;
+  const dialog = document.querySelector('#dialog');
+  dialog.innerHTML = `<h2>${esc(timer.name)} — Lap times</h2>
+    <div class="lap-list" role="list">
+      ${timer.laps.map((lap, index) => `<div class="lap-row" role="listitem"><strong>Lap ${index + 1}</strong><span><small>Lap time</small><b>${formatTime(lap.split)}</b></span><span><small>Total</small><b>${formatTime(lap.at)}</b></span></div>`).join('')}
+    </div>
+    <div class="dialog-actions"><button class="dialog-secondary" data-close>Done</button></div>`;
+  dialog.showModal();
+  dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
+}
+
 function showSettings() {
   const dialog = document.querySelector('#dialog');
   dialog.innerHTML = `<h2>Manage timers</h2>
@@ -172,6 +187,7 @@ function showSettings() {
     <div class="setting-row"><span>Vibrate on lap</span><button class="switch ${state.settings.vibration ? 'on' : ''}" data-setting="vibration" aria-label="Toggle vibration"></button></div>
     <div class="setting-row"><span>Keep screen awake</span><button class="switch ${state.settings.keepAwake ? 'on' : ''}" data-setting="keepAwake" aria-label="Toggle screen wake lock"></button></div>
     <p class="settings-tip">Tap any swimmer name on the main screen to edit it.</p>
+    <p class="app-version">Version ${APP_VERSION}</p>
     <div class="dialog-actions"><button class="dialog-secondary" data-close>Done</button></div>`;
   if (!dialog.open) dialog.showModal();
   dialog.querySelector('#add-timer').addEventListener('click', () => {
