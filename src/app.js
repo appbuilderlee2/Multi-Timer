@@ -376,6 +376,7 @@ function saveIndividualResult(timer, details = {}) {
   state.sessions = state.sessions.slice(0, 100);
   timer.lastSavedSignature = signature;
   save();
+  render();
   const dialog = document.querySelector('#dialog');
   const isPb = result.elapsed > 0 && result.elapsed < previousBest;
   const delta = previous > 0 ? result.elapsed - previous : 0;
