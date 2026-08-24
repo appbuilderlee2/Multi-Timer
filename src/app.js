@@ -1,9 +1,9 @@
 import './styles.css';
 
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.3.0';
 const STORAGE_KEY = 'swimtimer-independent-v2';
 const names = ['Anna', 'Ben', 'Chloe', 'David', 'Eva', 'Frank', 'Grace', 'Henry', 'Ivy', 'Jack'];
-const makeTimer = (name) => ({ id: crypto.randomUUID(), name, status: 'idle', elapsed: 0, startedAt: null, laps: [] });
+const makeTimer = (name) => ({ id: crypto.randomUUID(), name, status: 'idle', elapsed: 0, startedAt: null, laps: [], distance: 0 });
 const defaultState = { timers: names.map(makeTimer), view: 'grid', settings: { vibration: true, keepAwake: true, poolLength: 20 }, sessions: [] };
 
 function loadState() {
@@ -27,6 +27,8 @@ const app = document.querySelector('#app');
 const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 const currentElapsed = (timer, now = Date.now()) => timer.elapsed + (timer.status === 'running' ? now - timer.startedAt : 0);
 const poolLength = () => Math.max(1, Number(state.settings.poolLength) || 20);
+const timerDistance = (timer) => Math.max(0, Number(timer.distance) || timer.laps.length * poolLength());
+const savedTimerDistance = (timer, session) => Math.max(0, Number(timer.distance) || timer.laps.length * session.poolLength);
 const esc = (value) => String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 const formatSavedAt = (timestamp) => new Intl.DateTimeFormat('en-AU', { dateStyle: 'medium', timeStyle: 'short' }).format(timestamp);
 
@@ -69,6 +71,7 @@ function render() {
   }));
   document.querySelectorAll('[data-name]').forEach((button) => button.addEventListener('click', () => editName(button.dataset.name)));
   document.querySelectorAll('[data-laps]').forEach((button) => button.addEventListener('click', () => showLaps(button.dataset.laps)));
+  document.querySelectorAll('[data-distance]').forEach((button) => button.addEventListener('click', () => showDistanceInput(button.dataset.distance)));
   document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => timerAction(button.dataset.id, button.dataset.action)));
   document.querySelector('#all-start').addEventListener('click', startAll);
   document.querySelector('#all-stop').addEventListener('click', stopAll);
@@ -84,7 +87,7 @@ function timerCard(timer, index) {
   return `<article class="timer-card ${running ? 'running' : ''}" data-card="${timer.id}">
     <div class="card-head"><span class="lane-number">${index + 1}</span><button class="timer-name" data-name="${timer.id}" aria-label="Edit ${esc(timer.name)}">${esc(timer.name)}</button><span class="status-dot" aria-label="${running ? 'Running' : timer.status === 'paused' ? 'Stopped' : 'Idle'}"></span></div>
     <div class="elapsed" data-clock="${timer.id}">${formatTime(currentElapsed(timer))}</div>
-    <div class="timer-meta"><span class="meta-block"><small>Latest</small><b>${latest ? formatTime(latest.split) : '00:00.00'}</b></span><button class="meta-block lap-summary" data-laps="${timer.id}" aria-label="View ${esc(timer.name)} lap times" ${timer.laps.length ? '' : 'disabled'}><small>Laps · ${timer.laps.length * poolLength()}m</small><b>${timer.laps.length}</b></button></div>
+    <div class="timer-meta"><span class="meta-block"><small>Latest</small><b>${latest ? formatTime(latest.split) : '00:00.00'}</b></span><button class="meta-block lap-summary" data-laps="${timer.id}" aria-label="View ${esc(timer.name)} lap times" ${timer.laps.length ? '' : 'disabled'}><small>Laps</small><b>${timer.laps.length}</b></button><button class="meta-block distance-summary" data-distance="${timer.id}" aria-label="Set ${esc(timer.name)} distance"><small>Distance</small><b>${timerDistance(timer)}m</b></button></div>
     <div class="card-actions">
       <button class="${running ? 'stop-button' : 'start-button'}" data-action="${running ? 'stop' : 'start'}" data-id="${timer.id}">${running ? 'STOP' : 'START'}</button>
       <button class="${running ? 'lap-button' : 'reset-button'}" data-action="${running ? 'lap' : 'reset'}" data-id="${timer.id}" ${!running && !hasTime ? 'disabled' : ''}>${running ? 'LAP' : 'RESET'}</button>
@@ -146,7 +149,7 @@ function stopAll() {
 }
 
 function resetTimer(timer) {
-  Object.assign(timer, { status: 'idle', elapsed: 0, startedAt: null, laps: [] });
+  Object.assign(timer, { status: 'idle', elapsed: 0, startedAt: null, laps: [], distance: 0 });
 }
 
 function confirmResetAll() {
@@ -189,9 +192,24 @@ function showLaps(id) {
   dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
 }
 
+function showDistanceInput(id) {
+  const timer = state.timers.find((item) => item.id === id);
+  if (!timer) return;
+  const dialog = document.querySelector('#dialog');
+  dialog.innerHTML = `<form><h2>${esc(timer.name)} — Distance</h2><p>Enter the total distance completed. You do not need to press LAP during the swim.</p><label class="distance-entry"><span>Total distance</span><span><input id="distance-input" type="number" min="0" max="100000" step="1" inputmode="numeric" value="${timerDistance(timer)}"><b>m</b></span></label><div class="dialog-actions"><button type="button" class="dialog-secondary" data-close>Cancel</button><button class="dialog-primary">Save distance</button></div></form>`;
+  dialog.showModal();
+  const input = dialog.querySelector('#distance-input'); input.select();
+  dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
+  dialog.querySelector('form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    timer.distance = Math.min(100000, Math.max(0, Math.round(Number(input.value) || 0)));
+    save(); dialog.close(); render();
+  });
+}
+
 function showSettings() {
   const dialog = document.querySelector('#dialog');
-  const hasResults = state.timers.some((timer) => currentElapsed(timer) > 0 || timer.laps.length);
+  const hasResults = state.timers.some((timer) => currentElapsed(timer) > 0 || timer.laps.length || timerDistance(timer) > 0);
   dialog.innerHTML = `<h2>Manage timers</h2>
     <div class="manage-count"><button id="remove-timer" aria-label="Remove last timer">−</button><strong>${state.timers.length} swimmers</strong><button id="add-timer" aria-label="Add timer">＋</button></div>
     <div class="setting-row"><label for="pool-length">Pool length</label><span class="distance-input"><input id="pool-length" type="number" min="1" max="500" step="1" inputmode="numeric" value="${poolLength()}"><b>m</b></span></div>
@@ -227,8 +245,8 @@ function showSettings() {
 function saveSession() {
   const now = Date.now();
   const timers = state.timers
-    .map((timer) => ({ name: timer.name, elapsed: currentElapsed(timer, now), laps: timer.laps.map((lap) => ({ ...lap })) }))
-    .filter((timer) => timer.elapsed > 0 || timer.laps.length);
+    .map((timer) => ({ name: timer.name, elapsed: currentElapsed(timer, now), distance: timerDistance(timer), laps: timer.laps.map((lap) => ({ ...lap })) }))
+    .filter((timer) => timer.elapsed > 0 || timer.laps.length || timer.distance > 0);
   if (!timers.length) return;
   state.sessions.unshift({ id: crypto.randomUUID(), savedAt: now, poolLength: poolLength(), timers });
   state.sessions = state.sessions.slice(0, 100);
@@ -241,7 +259,7 @@ function showSavedSessions() {
   dialog.innerHTML = `<h2>Saved sessions</h2>
     <div class="session-list">
       ${state.sessions.length ? state.sessions.map((session) => {
-        const metres = session.timers.reduce((sum, timer) => sum + timer.laps.length * session.poolLength, 0);
+        const metres = session.timers.reduce((sum, timer) => sum + savedTimerDistance(timer, session), 0);
         return `<button class="session-card" data-session="${session.id}"><strong>${formatSavedAt(session.savedAt)}</strong><span>${session.timers.length} swimmers · ${metres}m recorded</span></button>`;
       }).join('') : '<p class="empty-state">No saved sessions yet.</p>'}
     </div>
@@ -257,7 +275,7 @@ function showSavedSession(id) {
   const dialog = document.querySelector('#dialog');
   dialog.innerHTML = `<h2>${formatSavedAt(session.savedAt)}</h2><p class="dialog-subtitle">${session.poolLength}m pool</p>
     <div class="saved-swimmers">
-      ${session.timers.map((timer, index) => `<button class="saved-swimmer" data-saved-swimmer="${index}"><strong>${esc(timer.name)}</strong><span>${formatTime(timer.elapsed)}</span><small>${timer.laps.length} laps · ${timer.laps.length * session.poolLength}m</small></button>`).join('')}
+      ${session.timers.map((timer, index) => `<button class="saved-swimmer" data-saved-swimmer="${index}"><strong>${esc(timer.name)}</strong><span>${formatTime(timer.elapsed)}</span><small>${timer.laps.length} laps · ${savedTimerDistance(timer, session)}m</small></button>`).join('')}
     </div>
     <div class="dialog-actions"><button class="dialog-secondary" id="session-back">Back</button></div>`;
   dialog.querySelectorAll('[data-saved-swimmer]').forEach((button) => button.addEventListener('click', () => showSavedSwimmer(id, Number(button.dataset.savedSwimmer))));
@@ -269,7 +287,7 @@ function showSavedSwimmer(sessionId, timerIndex) {
   const timer = session?.timers?.[timerIndex];
   if (!session || !timer) return;
   const dialog = document.querySelector('#dialog');
-  dialog.innerHTML = `<h2>${esc(timer.name)}</h2><p class="dialog-subtitle">${formatSavedAt(session.savedAt)} · ${timer.laps.length * session.poolLength}m</p>
+  dialog.innerHTML = `<h2>${esc(timer.name)}</h2><p class="dialog-subtitle">${formatSavedAt(session.savedAt)} · ${formatTime(timer.elapsed)} · ${savedTimerDistance(timer, session)}m</p>
     <div class="lap-list" role="list">
       ${timer.laps.length ? timer.laps.map((lap, index) => `<div class="lap-row" role="listitem"><strong>Lap ${index + 1}<small>${(index + 1) * session.poolLength}m</small></strong><span><small>Lap time</small><b>${formatTime(lap.split)}</b></span><span><small>Total</small><b>${formatTime(lap.at)}</b></span></div>`).join('') : '<p class="empty-state">No laps recorded.</p>'}
     </div>

@@ -45,11 +45,13 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--yellow); ou
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #41576d; }
 .running .status-dot { background: var(--aqua); box-shadow: 0 0 10px rgba(32,207,238,.8); }
 .elapsed { margin: 10px 0 8px; overflow: hidden; text-align: center; color: var(--text); font-family: "Arial Narrow", "Roboto Condensed", ui-monospace, monospace; font-size: clamp(1.65rem, 8.2vw, 3rem); line-height: 1; font-weight: 800; letter-spacing: -.06em; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.timer-meta { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 8px 4px; border-top: 1px solid rgba(59,82,107,.55); }
+.timer-meta { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 8px; padding: 8px 4px; border-top: 1px solid rgba(59,82,107,.55); }
 .meta-block { display: grid; gap: 2px; }
 .lap-summary { min-width: 46px; padding: 0; border: 0; text-align: right; color: var(--text); background: transparent; }
 .lap-summary:not(:disabled) small { color: var(--aqua); text-decoration: underline; text-underline-offset: 2px; }
 .lap-summary:disabled { opacity: 1; }
+.distance-summary { min-width: 58px; padding: 0; border: 0; text-align: right; color: var(--text); background: transparent; }
+.distance-summary small { color: var(--aqua); text-decoration: underline; text-underline-offset: 2px; }
 .timer-meta small { color: var(--muted); font-size: .66rem; }
 .timer-meta b { font-family: ui-monospace, "SFMono-Regular", monospace; font-size: .82rem; font-variant-numeric: tabular-nums; }
 .card-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
@@ -99,6 +101,9 @@ dialog p { color: var(--muted); line-height: 1.4; }
 .app-version { margin: 12px 0 0; text-align: center; color: #698097; font-size: .75rem; }
 .distance-input { display: flex; align-items: center; gap: 7px; }
 .distance-input input { width: 82px; height: 40px; padding: 0 9px; border: 1px solid var(--line); border-radius: 9px; color: var(--text); background: var(--bg); text-align: right; font-weight: 800; }
+.distance-entry { display: grid; gap: 8px; margin-top: 16px; color: var(--muted); font-size: .82rem; }
+.distance-entry > span:last-child { display: flex; align-items: center; gap: 8px; }
+.distance-entry input { width: 100%; height: 52px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--text); background: var(--bg); text-align: right; font-size: 1.2rem; font-weight: 850; }
 .records-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
 .records-actions button { min-height: 48px; padding: 8px; border-radius: 10px; font-weight: 850; }
 .save-records { border: 0; color: #032235; background: var(--aqua); }
@@ -136,6 +141,9 @@ dialog p { color: var(--muted); line-height: 1.4; }
   .elapsed { margin: 8px 0 6px; font-size: clamp(1.53rem, 7.7vw, 2.1rem); }
   .timer-meta { padding: 6px 2px; }
   .timer-meta b { font-size: .72rem; }
+  .timer-meta { gap: 5px; }
+  .lap-summary { min-width: 34px; }
+  .distance-summary { min-width: 50px; }
   .card-actions button { min-height: 44px; font-size: .69rem; }
   .list .timer-card { grid-template-columns: minmax(0, .9fr) minmax(122px, 1.25fr) 104px; gap: 4px 8px; }
   .list .card-head { grid-template-columns: 28px minmax(0,1fr) 9px; }
