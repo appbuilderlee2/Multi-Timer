@@ -62,7 +62,7 @@ function render() {
   document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => timerAction(button.dataset.id, button.dataset.action)));
   document.querySelector('#all-start').addEventListener('click', startAll);
   document.querySelector('#all-stop').addEventListener('click', stopAll);
-  document.querySelector('#all-reset').addEventListener('click', () => confirmReset('all'));
+  document.querySelector('#all-reset').addEventListener('click', confirmResetAll);
   document.querySelector('#settings').addEventListener('click', showSettings);
   startClockLoop();
 }
@@ -112,7 +112,11 @@ function timerAction(id, action) {
     timer.laps.push({ at, split: at - (timer.laps.at(-1)?.at || 0) });
     if (state.settings.vibration && navigator.vibrate) navigator.vibrate(35);
   }
-  if (action === 'reset') { confirmReset(id); return; }
+  if (action === 'reset') {
+    resetTimer(timer);
+    if (!state.timers.some((item) => item.status === 'running')) releaseWakeLock();
+    save(); render(); return;
+  }
   if (!state.timers.some((item) => item.status === 'running')) releaseWakeLock();
   save(); render();
 }
@@ -131,16 +135,17 @@ function stopAll() {
   releaseWakeLock(); save(); render();
 }
 
-function confirmReset(target) {
+function resetTimer(timer) {
+  Object.assign(timer, { status: 'idle', elapsed: 0, startedAt: null, laps: [] });
+}
+
+function confirmResetAll() {
   const dialog = document.querySelector('#dialog');
-  const all = target === 'all';
-  const timer = all ? null : state.timers.find((item) => item.id === target);
-  dialog.innerHTML = `<h2>Reset ${all ? 'all timers' : esc(timer?.name || 'timer')}?</h2><p>This removes the current time and all recorded laps.</p><div class="dialog-actions"><button class="dialog-secondary" data-close>Cancel</button><button class="dialog-danger" id="confirm-reset">Reset</button></div>`;
+  dialog.innerHTML = `<h2>Reset all timers?</h2><p>This removes every current time and all recorded laps.</p><div class="dialog-actions"><button class="dialog-secondary" data-close>Cancel</button><button class="dialog-danger" id="confirm-reset">Reset</button></div>`;
   if (!dialog.open) dialog.showModal();
   dialog.querySelector('[data-close]').addEventListener('click', () => dialog.close());
   dialog.querySelector('#confirm-reset').addEventListener('click', () => {
-    const reset = (item) => Object.assign(item, { status: 'idle', elapsed: 0, startedAt: null, laps: [] });
-    if (all) state.timers.forEach(reset); else if (timer) reset(timer);
+    state.timers.forEach(resetTimer);
     if (!state.timers.some((item) => item.status === 'running')) releaseWakeLock();
     save(); dialog.close(); render();
   });
