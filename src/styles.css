@@ -118,6 +118,12 @@ dialog p { color: var(--muted); line-height: 1.4; }
 .student-records { grid-column: 1 / -1; border: 1px solid var(--aqua); color: var(--aqua); background: rgba(32,207,238,.07); }
 .data-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; padding-top: 9px; }
 .data-actions button { min-height: 42px; padding: 6px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); background: var(--bg); font-size: .72rem; font-weight: 800; }
+.manual-record-button { width: 100%; min-height: 48px; margin-top: 15px; border: 1px solid var(--aqua); border-radius: 10px; color: var(--aqua); background: rgba(32,207,238,.07); font-weight: 850; }
+.manual-record-fields { margin-top: 16px; }
+.manual-time-help { margin: -2px 0 0; color: var(--muted); font-size: .72rem; line-height: 1.35; }
+.manual-time-help b { color: var(--text); font-family: ui-monospace, "SFMono-Regular", monospace; }
+.field-error { margin: -2px 0 0; color: #ff9aa0; font-size: .74rem; font-weight: 750; }
+.record-fields input[aria-invalid="true"] { border-color: var(--red); }
 .lap-list { max-height: min(52dvh, 420px); margin-top: 15px; overflow-y: auto; border-top: 1px solid var(--line); }
 .lap-row { display: grid; grid-template-columns: 64px 1fr 1fr; align-items: center; gap: 10px; padding: 11px 2px; border-bottom: 1px solid rgba(59,82,107,.65); }
 .lap-row strong { display: grid; gap: 2px; color: var(--aqua); font-size: .84rem; }
