@@ -1,6 +1,6 @@
 import './styles.css';
 
-const APP_VERSION = '2.9.0';
+const APP_VERSION = '2.9.1';
 const STORAGE_KEY = 'swimtimer-independent-v2';
 const names = ['Anna', 'Ben', 'Chloe', 'David', 'Eva', 'Frank', 'Grace', 'Henry', 'Ivy', 'Jack'];
 const makeTimer = (name) => {
@@ -60,8 +60,10 @@ function formatTime(milliseconds) {
 }
 
 function parseManualTime(value) {
-  const input = String(value || '').trim().replace(',', '.');
+  let input = String(value || '').trim().replace(',', '.');
   if (!input) return null;
+  const phoneFormat = input.match(/^(\d+)\.(\d{1,2})\.(\d{1,3})$/);
+  if (phoneFormat) input = `${phoneFormat[1]}:${phoneFormat[2]}.${phoneFormat[3]}`;
   const parts = input.split(':');
   if (parts.length > 3 || parts.some((part) => part === '' || !/^\d+(?:\.\d{1,3})?$/.test(part))) return null;
   const numbers = parts.map(Number);
@@ -489,9 +491,9 @@ function showManualResultForm(selectedStudentId = '') {
     <div class="record-fields manual-record-fields">
       <label class="wide">Student<select id="manual-student" required>${profiles.map((profile) => `<option value="${esc(profile.studentId)}" ${profile.studentId === selected ? 'selected' : ''}>${esc(profile.name)}</option>`).join('')}</select></label>
       <label>Distance (m)<input id="manual-distance" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="e.g. 400" required></label>
-      <label>Time<input id="manual-time" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. 1:32.45" required aria-describedby="manual-time-help manual-time-error"></label>
-      <p class="manual-time-help wide" id="manual-time-help">Use seconds or minutes:seconds — for example <b>32.80</b> or <b>1:32.45</b>.</p>
-      <p class="field-error wide" id="manual-time-error" role="alert" hidden>Please enter a valid time greater than 0, such as 1:32.45.</p>
+      <label>Time<input id="manual-time" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. 2.52.3" required aria-describedby="manual-time-help manual-time-error"></label>
+      <p class="manual-time-help wide" id="manual-time-help">On iPhone, enter <b>2.52.3</b> for 2:52.30. You can also use <b>2:52.3</b>.</p>
+      <p class="field-error wide" id="manual-time-error" role="alert" hidden>Please enter a valid time, such as 2.52.3 or 2:52.3.</p>
       <label>Stroke<select id="manual-stroke"><option value="">Not specified</option><option>Freestyle</option><option>Backstroke</option><option>Breaststroke</option><option>Butterfly</option><option>Individual medley</option></select></label>
       <label>Test / set<input id="manual-test" maxlength="40" placeholder="e.g. Time trial"></label>
       <label class="wide">Notes<textarea id="manual-notes" maxlength="200" rows="3" placeholder="Optional coaching notes"></textarea></label>
