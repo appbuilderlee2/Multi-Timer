@@ -1,4 +1,4 @@
-const CACHE = 'swimtimer-v3';
+const CACHE = 'swimtimer-v4';
 const CORE = ['./', './index.html'];
 
 self.addEventListener('install', (event) => {
