@@ -1,6 +1,6 @@
 import './styles.css';
 
-const APP_VERSION = '2.8.0';
+const APP_VERSION = '2.9.0';
 const STORAGE_KEY = 'swimtimer-independent-v2';
 const names = ['Anna', 'Ben', 'Chloe', 'David', 'Eva', 'Frank', 'Grace', 'Henry', 'Ivy', 'Jack'];
 const makeTimer = (name) => {
@@ -57,6 +57,24 @@ function formatTime(milliseconds) {
   const seconds = secondsTotal % 60;
   const minutes = Math.floor(secondsTotal / 60);
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
+}
+
+function parseManualTime(value) {
+  const input = String(value || '').trim().replace(',', '.');
+  if (!input) return null;
+  const parts = input.split(':');
+  if (parts.length > 3 || parts.some((part) => part === '' || !/^\d+(?:\.\d{1,3})?$/.test(part))) return null;
+  const numbers = parts.map(Number);
+  if (numbers.some((number) => !Number.isFinite(number) || number < 0)) return null;
+  if (parts.length > 1 && numbers.at(-1) >= 60) return null;
+  if (parts.length === 3 && numbers[1] >= 60) return null;
+  const seconds = parts.length === 1
+    ? numbers[0]
+    : parts.length === 2
+      ? numbers[0] * 60 + numbers[1]
+      : numbers[0] * 3600 + numbers[1] * 60 + numbers[2];
+  const milliseconds = Math.round(seconds * 1000);
+  return milliseconds > 0 && milliseconds <= 24 * 60 * 60 * 1000 ? milliseconds : null;
 }
 
 const settingsIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1A7 7 0 0 0 15 6l-.3-2.6h-4L10.5 6A7 7 0 0 0 9 7.1l-2.4-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1A7 7 0 0 0 10.5 18l.3 2.6h4L15 18a7 7 0 0 0 1.5-1.1l2.4 1 2-3.4-2-1.5a7 7 0 0 0 .1-1Z"/></svg>`;
@@ -421,6 +439,7 @@ function showStudentRecords() {
   const students = getStudentRecords();
   const dialog = document.querySelector('#dialog');
   dialog.innerHTML = `<h2>Student records</h2><p class="dialog-subtitle">All saved results grouped by student.</p>
+    <button class="manual-record-button" id="add-manual-record">＋ Add manual time</button>
     <div class="student-list">
       ${students.length ? students.map((student) => {
         const metres = student.results.reduce((sum, result) => sum + savedTimerDistance(result.timer, result.session), 0);
@@ -430,6 +449,7 @@ function showStudentRecords() {
     </div>
     <div class="dialog-actions"><button class="dialog-secondary" id="students-back">Back</button></div>`;
   if (!dialog.open) dialog.showModal();
+  dialog.querySelector('#add-manual-record').addEventListener('click', () => showManualResultForm());
   dialog.querySelectorAll('[data-student]').forEach((button) => button.addEventListener('click', () => showStudentHistory(button.dataset.student)));
   dialog.querySelector('#students-back').addEventListener('click', showSettings);
 }
@@ -454,10 +474,71 @@ function showStudentHistory(key) {
     <div class="student-results">
       ${distanceGroups.map((group) => `<section class="distance-record-group"><h3><strong>${group.distance}m</strong><span>${group.results.length} record${group.results.length === 1 ? '' : 's'}</span></h3><div class="distance-results">${group.results.map((result, index) => `<div class="student-result-row"><button class="student-result" data-result-session="${result.session.id}" data-result-timer="${result.timerIndex}"><span class="result-title"><strong class="result-time">${formatTime(result.timer.elapsed)}</strong>${index === 0 && result.timer.elapsed > 0 ? '<em>PB</em>' : ''}</span><small>${formatSavedAt(result.session.savedAt)} · ${result.timer.stroke ? `${esc(result.timer.stroke)} · ` : ''}${result.timer.laps.length} laps</small></button><button class="delete-record" data-delete-session="${result.session.id}" data-delete-timer="${result.timerIndex}" aria-label="Delete ${esc(student.name)} record from ${esc(formatSavedAt(result.session.savedAt))}">×</button></div>`).join('')}</div></section>`).join('')}
     </div>
-    <div class="dialog-actions"><button class="dialog-secondary" id="history-back">Back</button></div>`;
+    <div class="dialog-actions"><button class="dialog-secondary" id="history-back">Back</button><button class="dialog-primary" id="history-add-manual">＋ Manual time</button></div>`;
   dialog.querySelectorAll('[data-result-session]').forEach((button) => button.addEventListener('click', () => showSavedSwimmer(button.dataset.resultSession, Number(button.dataset.resultTimer), key)));
   dialog.querySelectorAll('[data-delete-session]').forEach((button) => button.addEventListener('click', () => confirmDeleteRecord(button.dataset.deleteSession, Number(button.dataset.deleteTimer), key)));
   dialog.querySelector('#history-back').addEventListener('click', showStudentRecords);
+  dialog.querySelector('#history-add-manual').addEventListener('click', () => showManualResultForm(key));
+}
+
+function showManualResultForm(selectedStudentId = '') {
+  const dialog = document.querySelector('#dialog');
+  const profiles = state.timers.map((timer) => ({ studentId: timer.studentId, name: timer.name }));
+  const selected = profiles.some((profile) => profile.studentId === selectedStudentId) ? selectedStudentId : profiles[0]?.studentId;
+  dialog.innerHTML = `<form id="manual-result-form"><h2>Add manual time</h2><p class="dialog-subtitle">Enter a completed result without using the timer.</p>
+    <div class="record-fields manual-record-fields">
+      <label class="wide">Student<select id="manual-student" required>${profiles.map((profile) => `<option value="${esc(profile.studentId)}" ${profile.studentId === selected ? 'selected' : ''}>${esc(profile.name)}</option>`).join('')}</select></label>
+      <label>Distance (m)<input id="manual-distance" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="e.g. 400" required></label>
+      <label>Time<input id="manual-time" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. 1:32.45" required aria-describedby="manual-time-help manual-time-error"></label>
+      <p class="manual-time-help wide" id="manual-time-help">Use seconds or minutes:seconds — for example <b>32.80</b> or <b>1:32.45</b>.</p>
+      <p class="field-error wide" id="manual-time-error" role="alert" hidden>Please enter a valid time greater than 0, such as 1:32.45.</p>
+      <label>Stroke<select id="manual-stroke"><option value="">Not specified</option><option>Freestyle</option><option>Backstroke</option><option>Breaststroke</option><option>Butterfly</option><option>Individual medley</option></select></label>
+      <label>Test / set<input id="manual-test" maxlength="40" placeholder="e.g. Time trial"></label>
+      <label class="wide">Notes<textarea id="manual-notes" maxlength="200" rows="3" placeholder="Optional coaching notes"></textarea></label>
+    </div>
+    <div class="dialog-actions"><button type="button" class="dialog-secondary" id="manual-back">Cancel</button><button class="dialog-primary">Save record</button></div></form>`;
+  if (!dialog.open) dialog.showModal();
+  const timeInput = dialog.querySelector('#manual-time');
+  timeInput.focus();
+  dialog.querySelector('#manual-back').addEventListener('click', () => selectedStudentId ? showStudentHistory(selectedStudentId) : showStudentRecords());
+  dialog.querySelector('#manual-result-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const elapsed = parseManualTime(timeInput.value);
+    const distance = Math.min(100000, Math.max(0, Math.round(Number(dialog.querySelector('#manual-distance').value) || 0)));
+    const error = dialog.querySelector('#manual-time-error');
+    timeInput.setAttribute('aria-invalid', String(!elapsed));
+    error.hidden = Boolean(elapsed);
+    if (!elapsed || distance <= 0) return;
+    const studentId = dialog.querySelector('#manual-student').value;
+    const profile = state.timers.find((timer) => timer.studentId === studentId);
+    if (!profile) return;
+    const result = {
+      studentId,
+      name: profile.name,
+      elapsed,
+      distance,
+      laps: [],
+      stroke: dialog.querySelector('#manual-stroke').value,
+      test: dialog.querySelector('#manual-test').value.trim(),
+      equipment: '',
+      notes: dialog.querySelector('#manual-notes').value.trim(),
+      manual: true,
+    };
+    state.sessions.unshift({ id: crypto.randomUUID(), savedAt: Date.now(), poolLength: poolLength(), individual: true, manual: true, timers: [result] });
+    state.sessions = state.sessions.slice(0, 100);
+    save();
+    showManualResultSaved(studentId, result);
+  });
+}
+
+function showManualResultSaved(studentId, result) {
+  const prior = previousResults(studentId, result.distance).filter((item) => item.timer !== result);
+  const previousBest = prior.reduce((best, item) => Math.min(best, item.timer.elapsed), Number.POSITIVE_INFINITY);
+  const isPb = result.elapsed < previousBest;
+  const dialog = document.querySelector('#dialog');
+  dialog.innerHTML = `<h2>${esc(result.name)} saved</h2><div class="record-hero"><strong>${result.distance}m</strong><b>${formatTime(result.elapsed)}</b></div><p class="performance-note ${isPb ? 'pb' : ''}">${!prior.length ? 'First result at this distance' : isPb ? `New PB · ${formatTime(previousBest - result.elapsed)} faster` : 'Manual result saved'}</p><div class="dialog-actions"><button class="dialog-secondary" id="manual-done">Done</button><button class="dialog-primary" id="manual-view-record">View record</button></div>`;
+  dialog.querySelector('#manual-done').addEventListener('click', () => { dialog.close(); render(); });
+  dialog.querySelector('#manual-view-record').addEventListener('click', () => showStudentHistory(studentId));
 }
 
 function confirmDeleteRecord(sessionId, timerIndex, studentKey) {
