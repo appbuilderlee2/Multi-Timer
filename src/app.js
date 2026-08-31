@@ -1,6 +1,6 @@
 import './styles.css';
 
-const APP_VERSION = '2.9.1';
+const APP_VERSION = '2.9.2';
 const STORAGE_KEY = 'swimtimer-independent-v2';
 const names = ['Anna', 'Ben', 'Chloe', 'David', 'Eva', 'Frank', 'Grace', 'Henry', 'Ivy', 'Jack'];
 const makeTimer = (name) => {
@@ -595,6 +595,6 @@ async function requestWakeLock() {
 async function releaseWakeLock() { try { await wakeLock?.release(); } catch { /* already released */ } wakeLock = null; }
 
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.timers.some((timer) => timer.status === 'running')) requestWakeLock(); });
-if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js'));
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/Multi-Timer/service-worker.js', { scope: '/Multi-Timer/' }));
 
 render();

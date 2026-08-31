@@ -1,5 +1,6 @@
-const CACHE = 'swimtimer-v5';
-const CORE = ['./', './index.html'];
+const CACHE = 'swimtimer-v6';
+const APP_ROOT = '/Multi-Timer/';
+const CORE = [APP_ROOT, `${APP_ROOT}index.html`, `${APP_ROOT}manifest.webmanifest`];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(CORE)).then(() => self.skipWaiting()));
@@ -11,11 +12,13 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  const requestUrl = new URL(event.request.url);
+  if (requestUrl.origin !== self.location.origin || !requestUrl.pathname.startsWith(APP_ROOT)) return;
   event.respondWith(fetch(event.request).then((response) => {
     if (response.ok) {
       const copy = response.clone();
       caches.open(CACHE).then((cache) => cache.put(event.request, copy));
     }
     return response;
-  }).catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html'))));
+  }).catch(() => caches.match(event.request).then((cached) => cached || (event.request.mode === 'navigate' ? caches.match(`${APP_ROOT}index.html`) : undefined))));
 });
