@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
+    "build": "vite build && mv dist/app-source.html dist/index.html",
     "preview": "vite preview --host 0.0.0.0"
   },
   "devDependencies": {
