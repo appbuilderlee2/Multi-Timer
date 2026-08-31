@@ -1,4 +1,4 @@
-const CACHE = 'swimtimer-v6';
+const CACHE = 'swimtimer-v7';
 const APP_ROOT = '/Multi-Timer/';
 const CORE = [APP_ROOT, `${APP_ROOT}index.html`, `${APP_ROOT}manifest.webmanifest`];
 
